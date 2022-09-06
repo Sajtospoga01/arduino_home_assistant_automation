@@ -13,11 +13,7 @@ EspMQTTClient client(
   "my_light"        // MQTT Client name
 );
 const String PREFIX = "homeassistant";
-const int transitionTime = 500; //500 ms
-int startedTransition = -1;
-double transitionProgress = -1;
-double transitionStep = 0;
-int transitionBrightness = 0;
+
 // Home Assitant device creation for MQTT discovery
 HAMqttDevice light("My Nice Lamp", HAMqttDevice::LIGHT);
 
@@ -29,8 +25,6 @@ bool lightOn = false;
 struct LightValues {
   bool lightOn;
   int brightness;
-  bool transitionState=false;
-  bool previousState;
 };
 
 LightValues lightValues = { .lightOn = false, .brightness = 100 };
@@ -51,6 +45,7 @@ void setup()
   device.insert("name","dim_light_arduino");
   device.insert("sw_version","1.0.0");
   String devString = device.json();
+  Serial.println(devString);
 
   // Setup the parameters of the device for MQTT discovery in HA
   light.enableAttributesTopic();
@@ -62,7 +57,7 @@ void setup()
   client.enableHTTPWebUpdater();
   client.setMaxPacketSize(512);
   //debugging enabled
-  //client.enableDebuggingMessages();
+  client.enableDebuggingMessages();
 }
 
 void onConnectionEstablished()
@@ -71,29 +66,10 @@ void onConnectionEstablished()
   client.subscribe(light.getCommandTopic(), [] (const String &payload)
   {
     // Turn the light on/off depending on the command received from Home Assitant
-    
-    if (payload.equals("ON")){
-      if(!lightValues.lightOn){
-        lightValues.transitionState = true;
-      }
-     
-
-      lightValues.previousState = lightValues.lightOn;
-      
+    if (payload.equals("ON"))
       lightValues.lightOn = true;
-      
-    }
-      
-    else if (payload.equals("OFF")){
-      if(lightValues.lightOn){
-        lightValues.transitionState = true;
-      }
-    
-      lightValues.previousState = lightValues.lightOn;
-      
+    else if (payload.equals("OFF"))
       lightValues.lightOn = false;
-    }
-      
 
     // Confirm to Home Assitant that we received the command and updated the state.
     // HA will then update the state of the device in HA
@@ -137,74 +113,8 @@ void loop()
 {
   client.loop();
 
-  if(lightValues.lightOn){
-    if(lightValues.transitionState == true){
-      changeState(true);
-    }else{
-      analogWrite(relayPin, lightValues.brightness);
-    }
-  }
-  else{
-    if(lightValues.transitionState == true){
-      changeState(false);
-    }else{
-      analogWrite(relayPin, 0);
-    }
-  }
-    
-
-  
-  
-}
-
-//creates a fading effect on the LED
-void changeState(bool stateOn){ 
-  if(lightValues.previousState != stateOn){
-    //sets teh beginning state of the transtion
-    if(startedTransition == -1){
-      startedTransition = millis();
-      transitionProgress = startedTransition;
-      transitionStep = (double)transitionTime/lightValues.brightness;
-      if(stateOn){
-        transitionBrightness = 0;
-        
-      }else{
-        transitionBrightness = lightValues.brightness;
-      }
-    }
-    
-    if(transitionTime+startedTransition>transitionProgress){     
-          analogWrite(relayPin, transitionBrightness);
-          if(stateOn){
-            if(millis()>transitionProgress + transitionStep){
-              transitionBrightness++;
-              transitionProgress = transitionProgress + transitionStep;
-            }
-          }
-          else{
-            if(millis()>transitionProgress + transitionStep){
-              transitionBrightness--;
-              transitionProgress = transitionProgress + transitionStep;
-            }
-          }
-     }else{
-        //resets transition data
-        lightValues.transitionState = false;
-        startedTransition = -1;
-        transitionProgress = -1;
-        transitionStep = 0;
-        transitionBrightness = 0;  
-     }
-   }else{
-      //resets transition data
-      lightValues.transitionState = false;
-      startedTransition = -1;
-      transitionProgress = -1;
-      transitionStep = 0;
-      transitionBrightness = 0;
-        
-      
-   }
-
-
+  if(lightValues.lightOn)
+    analogWrite(relayPin, lightValues.brightness);
+  else
+    analogWrite(relayPin, 0);
 }
